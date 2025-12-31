@@ -1,15 +1,22 @@
-pub mod token;
-
 /*
-	Tokens contain their line and line column
-*/
+   Tokens contain their line and line column
+ */
 
-enum Token {
-	LPAREN(), RPAREN
+pub enum Token {
+	ILLEGAL(String), EOF,
 
-	PLUS, MINUS, SLASH, STAR 
+		LParen, RParen,
+		LBracket, RBracket,
 
-	IF, ELSE,
+		Plus, Minus, Slash, Star, Comma, Semicolon,
 
-	TRUE, FALSE
+		Equal, EqualEqual,
+		Greater, GreaterEqual,
+		Less, LessEqual,
+
+		If, Else, Return, Print,
+
+		True, False,
+
+		Identifier(String), Number(f64),
 }
