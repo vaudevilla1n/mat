@@ -9,13 +9,15 @@ args		::= variable (',' variable)*
 
 body		::= '{' (statement)+ '}'
 
-statement	::= assignment | condition | return
+statement	::= assignment | condition | return | print
 
 assignment	::= identifier '=' expression ';'
 
 condition	::= 'if' expression body ( 'else' 'if' expression body )* ( 'else' body )?
 
 return		::= 'return' expression ';'
+
+print		::= 'print' expression ';'
 
 expression	::= comparison
 
@@ -35,3 +37,4 @@ call		::= identifier '(' expression ( ',' expression )* ')'
 
 identifier	::= [_a-zA-Z]+[a-zA-z0-9]*
 ```
+// love you so much
