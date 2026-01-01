@@ -3,8 +3,9 @@ use std::{
 	iter::Peekable,
 };
 
+#[derive(Clone)]
 #[derive(Debug)]
-pub enum Token{
+pub enum TokenKind {
 	Illegal(String),
 	EOF,
 
@@ -17,6 +18,7 @@ pub enum Token{
 	Minus,
 	Slash,
 	Star,
+	Caret,
 	Comma,	
 	Semicolon,
 
@@ -27,6 +29,7 @@ pub enum Token{
 	Less,
 	LessEqual,
 
+	Func,
 	If,
 	Else,
 	Return,
@@ -39,7 +42,17 @@ pub enum Token{
 	Number(f64),
 }
 
-#[allow(dead_code)]
+#[derive(Clone)]
+#[derive(Debug)]
+pub struct Token<'source> {
+	pub kind: TokenKind,
+	pub text: &'source str,
+	pub col: usize,
+	pub line: usize,
+}
+
+#[derive(Clone)]
+#[derive(Debug)]
 pub struct Lexer<'s> {
 	src: &'s str,
 	chars: Peekable<CharIndices<'s>>,
@@ -48,7 +61,6 @@ pub struct Lexer<'s> {
 	eof: bool
 }
 
-#[allow(dead_code)]
 impl<'s> Lexer<'s> {
 	pub fn new(src: &'s str) -> Lexer<'s> {
 		Lexer{
@@ -78,7 +90,7 @@ impl<'s> Lexer<'s> {
 		}
 	}
 
-	fn number(&mut self, start: usize) -> Token {
+	fn number(&mut self, start: usize) -> TokenKind {
 		while self.chars.next_if(|&(_, c)| c.is_numeric()) != None { }
 		if self.chars.next_if(|&(_, c)| c == '.') != None {
 			while self.chars.next_if(|&(_, c)| c.is_numeric()) != None { }
@@ -87,31 +99,31 @@ impl<'s> Lexer<'s> {
 		let s = self.slice(start);
 		let x: f64 = s.parse().unwrap();
 
-		Token::Number(x)
+		TokenKind::Number(x)
 	}
 
-	fn identifier(&mut self, start: usize) -> Token {
+	fn identifier(&mut self, start: usize) -> TokenKind {
 		while self.chars.next_if(|&(_, c)| c.is_alphanumeric() || c == '_') != None { }
 
 		let s = self.slice(start);
 
 		match s {
-		"if" => Token::If,
-		"else" => Token::Else,
-		"return" => Token::Return,
-		"print" => Token::Print,
-		"true" => Token::True,
-		"false" => Token::False,
+		"fn" => TokenKind::Func,
+		"if" => TokenKind::If,
+		"else" => TokenKind::Else,
+		"return" => TokenKind::Return,
+		"print" => TokenKind::Print,
+		"true" => TokenKind::True,
+		"false" => TokenKind::False,
 
-		_ => Token::Identifier(String::from(s)),
+		_ => TokenKind::Identifier(String::from(s)),
 		}
 	}
 }
 
 impl<'s> Iterator for Lexer<'s> {
-	type Item = (Token, &'s str, usize, usize);
+	type Item = Token<'s>;
 
-	#[allow(unused_variables)]
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.eof {
 			return None;
@@ -122,50 +134,59 @@ impl<'s> Iterator for Lexer<'s> {
 		let (line, col) = (self.line, self.col);
 
 		self.col += 1;
-		let (start, tok) = if let Some((i, c)) = self.chars.next() {
-			let t = match c {
-				'(' => Token::LParen,
-				')' => Token::RParen,
-				'{' => Token::LBracket,
-				'}' => Token::RBracket,
+		let (start, kind) = if let Some((i, c)) = self.chars.next() {
+			let k = match c {
+				'(' => TokenKind::LParen,
+				')' => TokenKind::RParen,
+				'{' => TokenKind::LBracket,
+				'}' => TokenKind::RBracket,
 
-				'+' => Token::Plus,
-				'-' => Token::Minus,
-				'/' => Token::Slash,
-				'*' => Token::Star,
-				',' => Token::Comma,
-				';' => Token::Semicolon,
+				'+' => match self.chars.next_if(|&(_, c)| c.is_numeric()) {
+					None => TokenKind::Plus,
+					Some(_) => self.number(i),
+				}
+
+				'-' => match self.chars.next_if(|&(_, c)| c.is_numeric()) {
+					None => TokenKind::Minus,
+					Some(_) => self.number(i),
+				}
+
+				'/' => TokenKind::Slash,
+				'*' => TokenKind::Star,
+				'^' => TokenKind::Caret,
+				',' => TokenKind::Comma,
+				';' => TokenKind::Semicolon,
 
 				'=' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => Token::Assign,
-					Some(_) => Token::Equal,
+					None => TokenKind::Assign,
+					Some(_) => TokenKind::Equal,
 				}
 
 				'>' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => Token::Greater,
-					Some(_) => Token::GreaterEqual,
+					None => TokenKind::Greater,
+					Some(_) => TokenKind::GreaterEqual,
 				}
 
 				'<' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => Token::Less,
-					Some(_) => Token::LessEqual,
+					None => TokenKind::Less,
+					Some(_) => TokenKind::LessEqual,
 				}
 
 				('0'..='9') => self.number(i),
 				
 				('a'..='z') | ('A'..='Z') | '_' => self.identifier(i),
 
-				_ => Token::Illegal(String::from("unknown token")),
+				_ => TokenKind::Illegal(String::from("erroneous character")),
 			};
 
-			(i, t)
+			(i, k)
 		} else {
 			self.eof = true;
-			return Some((Token::EOF, "EOF", line, col));
+			return Some(Token{kind: TokenKind::EOF, text: "EOF", col: col, line: line});
 		};
 
 		let text = self.slice(start);
 
-		Some((tok, text, line, col))
+		Some(Token{kind: kind, text: text, col: col, line: line})
 	}
 }

@@ -2,39 +2,56 @@
 
 This time it is a simple language with conditions, functions, basic arithmetic, and variables
 
+grammar
 ```
-function	::= fn identifier '(' args ')' body
+statement	::= simple_statment | compound_statement
 
-args		::= variable (',' variable)*
+simple_statement	::= assignment | return | print ';'
+compound_statement	::= function | condition
 
-body		::= '{' (statement)+ '}'
+function	::= fn identifier '(' param (',' param)* ')' body
+param		::= identifier
 
-statement	::= assignment | condition | return | print
+condition	::= 'if' expression body ( 'else' 'if' expression body )* [ 'else' body ]
 
-assignment	::= identifier '=' expression ';'
+body		::= '{' (simple_statement | condition)+ '}'
 
-condition	::= 'if' expression body ( 'else' 'if' expression body )* ( 'else' body )?
-
-return		::= 'return' expression ';'
-
-print		::= 'print' expression ';'
+assignment	::= identifier '=' expression
+return		::= 'return' expression
+print		::= 'print' expression
 
 expression	::= comparison
-
 comparsion	::= factor ( '==' | '>' | '>=' | '<' | '<=' factor)*
-
 factor		::= term ( '*' | '/' term )*
-
-term		::= literal ( '+' | '-' literal )*
-
+term		::= unary ( '+' | '-' unary )*
+unary		::= ('+' | '-') exponent
+exponent	::= literal '^' literal
 literal		::= '(' expression ')' | number | variable | call
-
 number		::= '+' | '-' [0-9]+ ( '.' [0-9]+ )?
-
 variable	::= identifier
-
 call		::= identifier '(' expression ( ',' expression )* ')'
 
 identifier	::= [_a-zA-Z]+[a-zA-z0-9]*
 ```
-// love you so much
+love you so much
+
+ast
+```
+ast:
+
+stmt	::= if(expr *bool, stmt true[], stmt false[])
+|	func(id name, stmt body[])
+|	assign(id var, expr value)
+|	expr(expr val)
+
+expr	::= binary	(expr left, binaryop op, expr right) 
+|	unary(unaryop op, expr right)
+|	group(expr val)
+|	call(id name, expr args[])
+|	literal(f64 number)
+|	var(id name)
+
+unaryop		::= ( 'return' | 'print' | '+' | '-')
+binaryop	::= ( '+' | '-' | '*' | '/' | '^' | '=' | '==' | '>' | '>=' | '<' | '<=' )
+id			::= identifier
+```

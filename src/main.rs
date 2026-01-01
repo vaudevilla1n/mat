@@ -3,11 +3,13 @@ use std::{
 };
 
 pub mod lexer;
+pub mod parser;
 
 fn run(src: &str) {
-	let l = lexer::Lexer::new(src);
+	let lexer = lexer::Lexer::new(src);
+	let mut parser = parser::Parser::new(lexer); 
 
-	l.for_each(|(t, text, line, col)| println!("{t:?} '{text}' (line {line}, col {col})") );
+	parser.parse();
 }
 
 fn main() {
