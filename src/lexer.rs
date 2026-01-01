@@ -1,60 +1,115 @@
-use crate::token::Token;
+use std::{
+	str::CharIndices,
+	iter::Peekable,
+};
 
-pub struct Lexer {
-	src: String,
-	pos: usize,
-	line: usize,
-	linecol: usize,
+#[derive(Debug)]
+pub enum Token{
+	Illegal(String),
+	EOF,
+
+	LParen,
+	RParen,
+	LBracket,
+	RBracket,
+
+	Plus,
+	Minus,
+	Slash,
+	Star,
+	Comma,	
+	Semicolon,
+
+	Assign,
+	Equal,
+	Greater,
+	GreaterEqual,
+	Less,
+	LessEqual,
+
+	If,
+	Else,
+	Return,
+	Print,
+
+	True,
+	False,
+
+	Identifier(String),
+	Number(f64),
 }
 
-impl Lexer {
-	pub fn new(src: String) -> Lexer {
-		Lexer { src: src, pos: 0, line: 1, linecol: 1 }
-	}
+#[allow(dead_code)]
+pub struct Lexer<'s> {
+	src: &'s str,
+	chars: Peekable<CharIndices<'s>>,
+	col: usize,
+	line: usize,
+}
 
-	fn peek(&self) -> Option<char> {
-		self.src.chars().nth(self.pos)
-	}
-
-	fn advance(&mut self) -> Option<char> {
-		let c = self.src.chars().nth(self.pos);
-
-		if c == None {
-			return None
+#[allow(dead_code)]
+impl<'s> Lexer<'s> {
+	pub fn new(src: &'s str) -> Lexer<'s> {
+		Lexer{
+			src: src,
+			chars: src.char_indices().peekable(),
+			col: 1,
+			line: 1,
 		}
+	}
 
-		let c = c.unwrap();
+	fn skip_whitespace(&mut self) {
+		while let Some(&(_, c)) = self.chars.peek() {
+			if !c.is_whitespace() {
+				break;
+			}
+	
+			if c == '\n' {
+				self.line += 1;
+				self.col = 1;
+			} else {
+				self.col += 1;
+			}
 
-		if c == '\n' {
-			self.line += 1;
-			self.linecol = 1;
+			self.chars.next();
+		}
+	}
+}
+
+impl<'s> Iterator for Lexer<'s> {
+	type Item = (Token, usize, usize);
+
+	#[allow(unused_variables)]
+	fn next(&mut self) -> Option<Self::Item> {
+		self.skip_whitespace();
+		
+		let (line, col) = (self.line, self.col);
+		let tok = if let Some(&(i, c)) = self.chars.peek() {
+			match c {
+				'(' => Token::LParen,
+				')' => Token::RParen,
+				'{' => Token::LBracket,
+				'}' => Token::RBracket,
+
+				'+' => Token::Plus,
+				'-' => Token::Minus,
+				'/' => Token::Slash,
+				'*' => Token::Star,
+				',' => Token::Comma,
+				';' => Token::Semicolon,
+
+				'=' => Token::Assign,
+				'>' => Token::Greater,
+				'<' => Token::Less,
+
+				_ => Token::Illegal(String::from("unknown token")),
+			}
 		} else {
-			self.linecol += 1;
-		}
-
-		Some(c)
-	}
-
-	pub fn next(&mut self) -> (Token, usize, usize) {
-		let line = self.line;
-		let linecol = self.linecol;
-		let token = match self.src.as_bytes() {
-			[b'(', rest @ ..] => { self.src = rest; Token::LPAREN },
-				/*
-				   ')' => token::RPAREN,
-				   '{' => token::LBRACKET,
-				   '}' => token::RBRACKET,
-				   '+' => token::PLUS,
-				   '-' => token::MINUS,
-				   '*' => token::STAR,
-				   '/' => token::SLASH,
-				   ',' => token::COMMA,
-				   ';' => token::SEMICOLON,
-				 */
-				[b'>', b'=', rest @ ..] => { self.src = rest; Token::LPAREN },
-				_ => panic!("bad")
+			Token::EOF
 		};
+		self.col += 1;
+		self.chars.next();
 
-		(token, line, linecol)
+		Some((tok, line, col))
 	}
 }
