@@ -7,18 +7,7 @@ pub mod lexer;
 fn run(src: &str) {
 	let l = lexer::Lexer::new(src);
 
-	for (t, line, col) in l {
-		match t {
-		lexer::Token::Illegal(err) => {
-			eprintln!("{err}");
-			return;
-		}
-
-		lexer::Token::EOF => { return; }
-
-		_ => println!("{t:?}: line {line}: col {col}"),
-		}
-	}
+	l.for_each(|(t, text, line, col)| println!("{t:?} '{text}' (line {line}, col {col})") );
 }
 
 fn main() {
