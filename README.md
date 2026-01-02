@@ -14,7 +14,7 @@ param		::= identifier
 
 if			::= 'if' expression body ( 'else' 'if' expression body )* [ 'else' body ]
 
-body		::= '{' (simple_statement | condition)+ '}'
+body		::= '{' statement+ '}'
 
 assignment	::= identifier '=' expression
 return		::= 'return' expression

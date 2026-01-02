@@ -1,4 +1,4 @@
-use std::{ fmt, error };
+use std::{ fmt, error, collections::HashMap };
 use crate::parser::{Expr, Stmt};
 use crate::lexer::Token;
 
@@ -21,6 +21,7 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
+#[derive(Clone)]
 #[derive(Debug)]
 pub enum Object {
 	Number(f64),
@@ -36,80 +37,168 @@ impl fmt::Display for Object {
 	}
 }
 
-#[allow(unused_variables)]
-fn eval_expression(e: Expr) -> Result<Object, Error> {
-	match e {
-		Expr::Binary(left, op, right) => {
-			let x = eval_expression(*left)?;
-			let y = eval_expression(*right)?;
+pub struct Runtime {
+	global_variable_index: HashMap<String, Object>,
+	ret: Option<Object>,
+}
 
-			match (x, op, y) {
-				(Object::Number(x), Token::Plus, Object::Number(y)) => Ok(Object::Number(x + y)),
-				(Object::Number(x), Token::Minus, Object::Number(y)) => Ok(Object::Number(x - y)),
-				(Object::Number(x), Token::Star, Object::Number(y)) => Ok(Object::Number(x * y)),
-				(Object::Number(x), Token::Slash, Object::Number(y)) => {
-					if y == 0.0 {
-						Err(Error::new("division by zero"))
-					} else {
-						Ok(Object::Number(x / y))
+impl Runtime {
+	pub fn new() -> Runtime {
+		Runtime{
+			global_variable_index: HashMap::new(),
+			ret: None,
+		}
+	}
+
+	#[allow(unused_variables)]
+	fn expression(&self, e: Expr) -> Result<Object, Error> {
+		match e {
+			Expr::Binary(left, op, right) => {
+				let x = self.expression(*left)?;
+				let y = self.expression(*right)?;
+
+				match (x, op, y) {
+					(Object::Number(x), Token::Plus, Object::Number(y)) => Ok(Object::Number(x + y)),
+					(Object::Number(x), Token::Minus, Object::Number(y)) => Ok(Object::Number(x - y)),
+					(Object::Number(x), Token::Star, Object::Number(y)) => Ok(Object::Number(x * y)),
+					(Object::Number(x), Token::Slash, Object::Number(y)) => {
+						if y == 0.0 {
+							Err(Error::new("division by zero"))
+						} else {
+							Ok(Object::Number(x / y))
+						}
 					}
+					(Object::Number(x), Token::Caret, Object::Number(y)) => Ok(Object::Number(x.powf(y))),
+
+					(Object::Number(x), Token::Less, Object::Number(y)) => Ok(Object::Bool(x < y)),
+					(Object::Number(x), Token::LessEqual, Object::Number(y)) => Ok(Object::Bool(x <= y)),
+					(Object::Number(x), Token::Equal, Object::Number(y)) => Ok(Object::Bool(x == y)),
+					(Object::Bool(x), Token::Equal, Object::Bool(y)) => Ok(Object::Bool(x == y)),
+					(Object::Number(x), Token::Greater, Object::Number(y)) => Ok(Object::Bool(x > y)),
+					(Object::Number(x), Token::GreaterEqual, Object::Number(y)) => Ok(Object::Bool(x >= y)),
+
+					_ => Err(Error::new("invalid binary operands")),
 				}
-				(Object::Number(x), Token::Caret, Object::Number(y)) => Ok(Object::Number(x.powf(y))),
+			}
 
-				(Object::Number(x), Token::Less, Object::Number(y)) => Ok(Object::Bool(x < y)),
-				(Object::Number(x), Token::LessEqual, Object::Number(y)) => Ok(Object::Bool(x <= y)),
-				(Object::Number(x), Token::Equal, Object::Number(y)) => Ok(Object::Bool(x == y)),
-				(Object::Bool(x), Token::Equal, Object::Bool(y)) => Ok(Object::Bool(x == y)),
-				(Object::Number(x), Token::Greater, Object::Number(y)) => Ok(Object::Bool(x > y)),
-				(Object::Number(x), Token::GreaterEqual, Object::Number(y)) => Ok(Object::Bool(x >= y)),
+			Expr::Unary(op, right) => {
+				let x = self.expression(*right)?;
 
-				_ => Err(Error::new("invalid binary operands")),
+				match (op, x) {
+					(Token::Minus, Object::Number(x)) => Ok(Object::Number(-x)),
+					(Token::Plus, Object::Number(x)) => Ok(Object::Number(x)),
+
+					_ => Err(Error::new("invalid unary operands")),
+				}
+			}
+
+			Expr::Group(expr) => self.expression(*expr),
+
+			Expr::Call(func_name, args) => { todo!() }
+
+			Expr::Number(x) => Ok(Object::Number(x)),
+
+			Expr::Bool(b) => Ok(Object::Bool(b)),
+
+			Expr::Var(var_name) => {
+				match self.global_variable_index.get(&var_name) {
+					Some(o) => Ok(o.clone()),
+					None => Err(Error::new(&format!("variable '{var_name}' not found"))),
+				}
+			}
+		}
+	}
+
+	#[allow(unused_variables)]
+	fn stmt(&mut self, stmt: Stmt) -> Result<(), Error> {
+		match stmt {
+			Stmt::Body(_) => { self.body(stmt)?; }
+
+			Stmt::If(cond, body, else_body) => { self.if_stmt(cond, body, else_body)?; }
+
+			Stmt::Func(func_name, args, body) => { todo!(); }
+
+			Stmt::Assign(var_name, expr) => {
+				let val = self.expression(expr)?;
+				self.global_variable_index.insert(var_name.to_string(), val);
+			}
+
+			Stmt::Print(expr) => {
+				let obj = self.expression(expr)?; 
+				println!("{obj}");
+			}
+
+			Stmt::Return(expr) => {
+				let obj = self.expression(expr)?; 
+				self.ret = Some(obj);
 			}
 		}
 
-		Expr::Unary(op, right) => {
-			let x = eval_expression(*right)?;
+		Ok(())
+	}
 
-			match (op, x) {
-				(Token::Minus, Object::Number(x)) => Ok(Object::Number(-x)),
-				(Token::Plus, Object::Number(x)) => Ok(Object::Number(x)),
+	fn body(&mut self, body: Stmt) -> Result<(), Error> {
+		let body = match body {
+			Stmt::Body(body) => body,
+			_ => unreachable!(),
+		};
 
-				_ => Err(Error::new("invalid unary operands")),
+		for stmt in body {
+			self.stmt(stmt)?;
+		}
+
+		Ok(())
+	}
+
+	fn if_stmt(&mut self, cond: Expr, body: Box<Stmt>, else_body: Option<Box<Stmt>>) -> Result<(), Error> {
+		let cond = self.expression(cond)?;
+		match cond {
+			Object::Bool(true) => self.body(*body),
+
+			Object::Bool(false) => {
+				if let Some(else_body) = else_body {
+					match *else_body {
+						// either an if statement or a regular body
+						Stmt::If(cond, body, else_body) => self.if_stmt(cond, body, else_body),
+
+						body => self.body(body),
+					}
+				} else {
+					Ok(())
+				}
+			}
+
+			_ => Err(Error::new("invalid expression for if statement")),
+		}
+	}
+
+	#[allow(unused_variables)]
+	pub fn eval(&mut self, stmts: Vec<Stmt>) -> Result<(), Error> {
+		for stmt in stmts {
+			println!("{stmt:?}");
+
+			match stmt {
+				// Body(Vec<Stmt>) => {}
+
+				Stmt::If(cond, body, else_body) => { self.if_stmt(cond, body, else_body)?; }
+
+				Stmt::Func(func_name, args, body) => { todo!(); }
+
+				Stmt::Assign(var_name, expr) => {
+					let val = self.expression(expr)?;
+					self.global_variable_index.insert(var_name.to_string(), val);
+				}
+
+				Stmt::Print(expr) => {
+					let obj = self.expression(expr)?; 
+					println!("{obj}");
+				}
+
+				_ => { unreachable!(); }
 			}
 		}
 
-		Expr::Group(expr) => eval_expression(*expr),
-
-		Expr::Call(func_name, args) => { todo!() }
-
-		Expr::Number(x) => Ok(Object::Number(x)),
-
-		Expr::Bool(b) => Ok(Object::Bool(b)),
-
-		Expr::Var(var_name) => { todo!() }
+		Ok(())
 	}
 }
 
-#[allow(unused_variables)]
-pub fn eval(stmt: Stmt) -> Result<(), Error> {
-	match stmt {
-		// Body(Vec<Stmt>) => {}
-
-		Stmt::If(cond, body, else_body) => { todo!(); }
-
-		Stmt::Func(func_name, args, body) => { todo!(); }
-
-		Stmt::Assign(var_name, expr) => { todo!(); }
-
-		Stmt::Print(expr) => {
-			let obj = eval_expression(expr)?; 
-			println!("{obj}");
-
-			Ok(())
-		}
-
-		Stmt::Return(expr) => { todo!(); }
-
-		_ => { unreachable!(); }
-	}
-}

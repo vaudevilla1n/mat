@@ -12,11 +12,10 @@ fn run(src: &str) {
 
 	match parser.parse() {
 		Ok(stmts) => {
-			for stmt in stmts {
-					println!("{stmt:?}");
-					if let Err(err) = runtime::eval(stmt) {
-						eprintln!("{err}");
-					}
+			let mut runtime = runtime::Runtime::new();
+
+			if let Err(err) = runtime.eval(stmts) {
+				eprintln!("{err}");
 			}
 		}
 
