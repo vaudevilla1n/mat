@@ -5,7 +5,8 @@ use std::{
 
 #[derive(Clone)]
 #[derive(Debug)]
-pub enum TokenKind {
+#[derive(PartialEq)]
+pub enum Token {
 	Illegal(String),
 	EOF,
 
@@ -44,32 +45,30 @@ pub enum TokenKind {
 
 #[derive(Clone)]
 #[derive(Debug)]
-pub struct Token<'source> {
-	pub kind: TokenKind,
-	pub text: &'source str,
-	pub col: usize,
-	pub line: usize,
-}
-
-#[derive(Clone)]
-#[derive(Debug)]
 pub struct Lexer<'s> {
 	src: &'s str,
 	chars: Peekable<CharIndices<'s>>,
 	col: usize,
 	line: usize,
-	eof: bool
+	curr: Token
 }
 
 impl<'s> Lexer<'s> {
 	pub fn new(src: &'s str) -> Lexer<'s> {
-		Lexer{
+		let mut lexer = Lexer{
 			src: src,
 			chars: src.char_indices().peekable(),
 			col: 1,
 			line: 1,
-			eof: false,
-		}
+			curr: Token::EOF,
+		};
+		lexer.next();
+
+		lexer
+	}
+
+	pub fn pos(&self) -> (usize, usize) {
+		(self.line, self.col)
 	}
 
 	fn skip_whitespace(&mut self) {
@@ -83,110 +82,129 @@ impl<'s> Lexer<'s> {
 		}
 	}
 
-	fn slice(&mut self, start: usize) -> &'s str {
+	fn advance_if(&mut self, c: char) -> bool {
+		match self.chars.next_if(|&(_, curr)| curr == c) {
+			Some(_) => {
+				self.col += 1;
+
+				true
+			},
+
+			None => false,
+		}
+	}
+
+	fn text_from(&mut self, start: usize) -> &'s str {
 		match self.chars.peek() {
 			Some(&(i, _)) => &self.src[start..i],
 			None => &self.src[start..],
 		}
 	}
 
-	fn number(&mut self, start: usize) -> TokenKind {
-		while self.chars.next_if(|&(_, c)| c.is_numeric()) != None { }
-		if self.chars.next_if(|&(_, c)| c == '.') != None {
-			while self.chars.next_if(|&(_, c)| c.is_numeric()) != None { }
+	fn number(&mut self, start: usize) -> Token {
+		let is_num = |(_, c): &(usize, char)| c.is_numeric();
+
+		while self.chars.next_if(is_num) != None {
+			self.col += 1;
 		}
 
-		let s = self.slice(start);
-		let x: f64 = s.parse().unwrap();
+		if self.advance_if('.') {
+			while self.chars.next_if(is_num) != None {
+				self.col += 1;
+			}
+		}
 
-		TokenKind::Number(x)
+		let x: f64 = self.text_from(start).parse().unwrap();
+
+		Token::Number(x)
 	}
 
-	fn identifier(&mut self, start: usize) -> TokenKind {
-		while self.chars.next_if(|&(_, c)| c.is_alphanumeric() || c == '_') != None { }
+	fn identifier(&mut self, start: usize) -> Token {
+		let is_alnum = |(_i, c): &(usize, char)| c.is_alphanumeric();
 
-		let s = self.slice(start);
+		while self.chars.next_if(is_alnum) != None {
+			self.col += 1;
+		}
+
+		let s = self.text_from(start);
 
 		match s {
-		"fn" => TokenKind::Func,
-		"if" => TokenKind::If,
-		"else" => TokenKind::Else,
-		"return" => TokenKind::Return,
-		"print" => TokenKind::Print,
-		"true" => TokenKind::True,
-		"false" => TokenKind::False,
+		"fn" => Token::Func,
+		"if" => Token::If,
+		"else" => Token::Else,
+		"return" => Token::Return,
+		"print" => Token::Print,
+		"true" => Token::True,
+		"false" => Token::False,
 
-		_ => TokenKind::Identifier(String::from(s)),
+		_ => Token::Identifier(String::from(s)),
 		}
 	}
-}
 
-impl<'s> Iterator for Lexer<'s> {
-	type Item = Token<'s>;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.eof {
-			return None;
-		}
-
+	pub fn next(&mut self) -> Token {
 		self.skip_whitespace();
-		
-		let (line, col) = (self.line, self.col);
 
-		self.col += 1;
-		let (start, kind) = if let Some((i, c)) = self.chars.next() {
-			let k = match c {
-				'(' => TokenKind::LParen,
-				')' => TokenKind::RParen,
-				'{' => TokenKind::LBracket,
-				'}' => TokenKind::RBracket,
+		let curr = self.curr.clone();
+		self.curr = if let Some((i, c)) = self.chars.next() {
+			let is_num = |(_, c): &(usize, char)| c.is_numeric();
+			self.col += 1;
 
-				'+' => match self.chars.next_if(|&(_, c)| c.is_numeric()) {
-					None => TokenKind::Plus,
-					Some(_) => self.number(i),
+			match c {
+				'(' => Token::LParen,
+				')' => Token::RParen,
+				'{' => Token::LBracket,
+				'}' => Token::RBracket,
+
+				'+' => if self.chars.next_if(is_num) == None {
+					Token::Plus
+				} else {
+					self.number(i)
 				}
 
-				'-' => match self.chars.next_if(|&(_, c)| c.is_numeric()) {
-					None => TokenKind::Minus,
-					Some(_) => self.number(i),
+				'-' => if self.chars.next_if(is_num) == None {
+					Token::Minus
+				} else {
+					self.number(i)
 				}
 
-				'/' => TokenKind::Slash,
-				'*' => TokenKind::Star,
-				'^' => TokenKind::Caret,
-				',' => TokenKind::Comma,
-				';' => TokenKind::Semicolon,
+				'/' => Token::Slash,
+				'*' => Token::Star,
+				'^' => Token::Caret,
+				',' => Token::Comma,
+				';' => Token::Semicolon,
 
-				'=' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => TokenKind::Assign,
-					Some(_) => TokenKind::Equal,
+				'=' => if !self.advance_if('=') {
+					Token::Assign
+				} else {
+					Token::Equal
 				}
 
-				'>' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => TokenKind::Greater,
-					Some(_) => TokenKind::GreaterEqual,
+				'>' => if !self.advance_if('=') {
+					Token::Greater
+				} else {
+					Token::GreaterEqual
 				}
 
-				'<' => match self.chars.next_if(|&(_, c)| c == '=') {
-					None => TokenKind::Less,
-					Some(_) => TokenKind::LessEqual,
+				'<' => if !self.advance_if('=') {
+					Token::Less
+				} else {
+					Token::LessEqual
 				}
 
 				('0'..='9') => self.number(i),
 				
 				('a'..='z') | ('A'..='Z') | '_' => self.identifier(i),
 
-				_ => TokenKind::Illegal(String::from("erroneous character")),
-			};
-
-			(i, k)
+				_ => Token::Illegal(String::from("erroneous character")),
+			}
 		} else {
-			self.eof = true;
-			return Some(Token{kind: TokenKind::EOF, text: "EOF", col: col, line: line});
+			Token::EOF
 		};
 
-		let text = self.slice(start);
+		curr
+	}
 
-		Some(Token{kind: kind, text: text, col: col, line: line})
+	pub fn peek(&self) -> Token {
+		self.curr.clone()
 	}
 }

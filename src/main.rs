@@ -9,7 +9,10 @@ fn run(src: &str) {
 	let lexer = lexer::Lexer::new(src);
 	let mut parser = parser::Parser::new(lexer); 
 
-	parser.parse();
+	match parser.parse() {
+		Ok(expr) => println!("{expr:?}"),
+		Err(err) => eprintln!("{err}"),
+	}
 }
 
 fn main() {

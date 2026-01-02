@@ -21,11 +21,11 @@ return		::= 'return' expression
 print		::= 'print' expression
 
 expression	::= comparison
-comparsion	::= factor ( '==' | '>' | '>=' | '<' | '<=' factor)*
-factor		::= term ( '*' | '/' term )*
-term		::= unary ( '+' | '-' unary )*
-unary		::= ('+' | '-') exponent
-exponent	::= literal '^' literal
+comparsion	::= term ( '==' | '>' | '>=' | '<' | '<=' term)*
+term		::= factor ( '+' | '-' factor )*
+factor		::= unary ( '*' | '/' unary )*
+exponent	::= unary '^' unary
+unary		::= ('+' | '-') literal
 literal		::= '(' expression ')' | number | variable | call
 number		::= '+' | '-' [0-9]+ ( '.' [0-9]+ )?
 variable	::= identifier
@@ -40,13 +40,13 @@ ast
 stmt	::= if(expr *bool, stmt true[], stmt false[])
 |	func(id name, stmt body[])
 |	assign(id var, expr value)
-|	expr(expr val)
+|	expression(expr val)
 
 expr	::= binary	(expr left, binaryop op, expr right) 
 |	unary(unaryop op, expr right)
 |	group(expr val)
 |	call(id name, expr args[])
-|	literal(f64 number)
+|	number(f64 number)
 |	var(id name)
 
 unaryop		::= ( 'return' | 'print' | '+' | '-')
