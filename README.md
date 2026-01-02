@@ -37,8 +37,6 @@ love you so much
 
 ast
 ```
-ast:
-
 stmt	::= if(expr *bool, stmt true[], stmt false[])
 |	func(id name, stmt body[])
 |	assign(id var, expr value)
