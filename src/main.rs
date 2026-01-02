@@ -4,13 +4,22 @@ use std::{
 
 pub mod lexer;
 pub mod parser;
+pub mod runtime;
 
 fn run(src: &str) {
 	let lexer = lexer::Lexer::new(src);
 	let mut parser = parser::Parser::new(lexer); 
 
 	match parser.parse() {
-		Ok(stmts) => stmts.into_iter().for_each(|stmt| println!("{stmt:?}")),
+		Ok(stmts) => {
+			for stmt in stmts {
+					println!("{stmt:?}");
+					if let Err(err) = runtime::eval(stmt) {
+						eprintln!("{err}");
+					}
+			}
+		}
+
 		Err(err) => eprintln!("{err}"),
 	}
 }

@@ -42,7 +42,6 @@ stmt	::= if(expr *bool, stmt body[], stmt else_body[])
 |	assign(id var, expr value)
 |	return(expr value)
 |	print(expr value)
-|	expression(expr val)
 
 expr	::= binary	(expr left, binaryop op, expr right) 
 |	unary(unaryop op, expr right)

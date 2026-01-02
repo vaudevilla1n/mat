@@ -1,12 +1,12 @@
-use std::{ rc::Rc, fmt, error };
+use std::{ boxed::Box, fmt, error };
 use crate::lexer::*;
 
 
 #[derive(Debug)]
 pub enum Expr {
-	Binary(Rc<Expr>, Token, Rc<Expr>),
-	Unary(Token, Rc<Expr>),
-	Group(Rc<Expr>),
+	Binary(Box<Expr>, Token, Box<Expr>),
+	Unary(Token, Box<Expr>),
+	Group(Box<Expr>),
 	Call(String, Vec<Expr>),
 	Number(f64),
 	Bool(bool),
@@ -16,24 +16,29 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Stmt {
 	Body(Vec<Stmt>),
-	If(Expr, Rc<Stmt>, Option<Rc<Stmt>>),
-	Func(String, Vec<String>, Rc<Stmt>),
+	If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+	Func(String, Vec<String>, Box<Stmt>),
 	Assign(String, Expr),
 	Print(Expr),
 	Return(Expr),
-	Expression(Expr),
 }
 
 #[derive(Debug)]
 pub struct Error {
-	col: usize,
-	line: usize,
+	pos: (usize, usize),
 	msg: String,
+}
+
+impl Error {
+	fn new(msg: &str, pos: (usize, usize)) -> Error {
+		Error{msg: msg.to_string(), pos: pos}
+	}
 }
 
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "parser error: line {}, col {}: {}", self.line, self.col, self.msg)
+		let (line, col) = self.pos;
+		write!(f, "parser error: line {}, col {}: {}", line, col, self.msg)
 	}
 }
 
@@ -44,16 +49,13 @@ pub struct Parser<'s> {
 	tokens: Lexer<'s>,
 }
 
-#[allow(dead_code)]
 impl<'s> Parser<'s> {
 	pub fn new(l: Lexer<'s>) -> Parser<'s> {
 		Parser{tokens: l}
 	}
 
 	fn err(&self, msg: &str) -> Error {
-		let (line, col) = self.tokens.pos();
-
-		Error{line: line, col: col, msg: msg.to_string()}
+		Error::new(msg, self.tokens.pos())
 	}
 
 	fn check(&mut self, expected: Token) -> bool {
@@ -85,11 +87,11 @@ impl<'s> Parser<'s> {
 	fn call(&mut self, func_name: String) -> Result<Expr, Error> {
 		let mut args: Vec<Expr> = Vec::new();
 		if self.tokens.peek() != Token::RParen {
-			let arg = self.expr()?;
+			let arg = self.expression()?;
 			args.push(arg);
 
 			while self.consumed(Token::Comma) {
-				let arg = self.expr()?;
+				let arg = self.expression()?;
 				args.push(arg);
 			}
 
@@ -108,11 +110,11 @@ impl<'s> Parser<'s> {
 			Token::False => Ok(Expr::Bool(false)),
 
 			Token::LParen => {
-				let e = self.expr()?;
+				let e = self.expression()?;
 
 				self.expect(Token::RParen, "expected closing parentheses")?;
 
-				Ok(Expr::Group(Rc::new(e)))
+				Ok(Expr::Group(Box::new(e)))
 			}
 
 			Token::Identifier(name) => {
@@ -132,7 +134,7 @@ impl<'s> Parser<'s> {
 			let op = self.tokens.next();
 			let right = self.literal()?;
 
-			Ok(Expr::Unary(op, Rc::new(right)))
+			Ok(Expr::Unary(op, Box::new(right)))
 		} else {
 			self.literal()
 		}
@@ -145,7 +147,7 @@ impl<'s> Parser<'s> {
 			let op = self.tokens.next();
 			let right = self.unary()?;
 
-			Ok(Expr::Binary(Rc::new(left), op, Rc::new(right)))
+			Ok(Expr::Binary(Box::new(left), op, Box::new(right)))
 		} else {
 			Ok(left)
 		}
@@ -158,7 +160,7 @@ impl<'s> Parser<'s> {
 			let op = self.tokens.next();
 			let right = self.exponent()?;
 
-			e = Expr::Binary(Rc::new(e), op, Rc::new(right));
+			e = Expr::Binary(Box::new(e), op, Box::new(right));
 		}
 
 		Ok(e)
@@ -171,7 +173,7 @@ impl<'s> Parser<'s> {
 			let op = self.tokens.next();
 			let right = self.factor()?;
 
-			e = Expr::Binary(Rc::new(e), op, Rc::new(right));
+			e = Expr::Binary(Box::new(e), op, Box::new(right));
 		}
 
 		Ok(e)
@@ -184,26 +186,18 @@ impl<'s> Parser<'s> {
 			let op = self.tokens.next();
 			let right = self.term()?;
 
-			e = Expr::Binary(Rc::new(e), op, Rc::new(right));
+			e = Expr::Binary(Box::new(e), op, Box::new(right));
 		}
 
 		Ok(e)
 	}
 
-	fn expr(&mut self) -> Result<Expr, Error> {
+	fn expression(&mut self) -> Result<Expr, Error> {
 		self.comparison()
 	}
 
-	fn expression(&mut self) -> Result<Stmt, Error> {
-		let expr = self.expr()?;
-
-		self.expect(Token::Semicolon, "missing semicolon")?;
-
-		Ok(Stmt::Expression(expr))
-	}
-
 	fn assign(&mut self, var_name: String) -> Result<Stmt, Error> {
-		let expr = self.expr()?;
+		let expr = self.expression()?;
 
 		self.expect(Token::Semicolon, "missing semicolon")?;
 
@@ -211,14 +205,14 @@ impl<'s> Parser<'s> {
 	}
 
 	fn return_stmt(&mut self) -> Result<Stmt, Error> {
-		let expr = self.expr()?;
+		let expr = self.expression()?;
 		self.expect(Token::Semicolon, "missing semicolon")?;
 
 		Ok(Stmt::Return(expr))
 	}
 
 	fn print_stmt(&mut self) -> Result<Stmt, Error> {
-		let expr = self.expr()?;
+		let expr = self.expression()?;
 		self.expect(Token::Semicolon, "missing semicolon")?;
 
 		Ok(Stmt::Print(expr))
@@ -243,19 +237,19 @@ impl<'s> Parser<'s> {
 	}
 
 	fn if_stmt(&mut self) -> Result<Stmt, Error> {
-		let condition = self.expr()?;
+		let condition = self.expression()?;
 		let body = self.body()?;
 		let else_body = if self.consumed(Token::Else) {
 			if self.consumed(Token::If) {
-				Some(Rc::new(self.if_stmt()?))
+				Some(Box::new(self.if_stmt()?))
 			} else {
-				Some(Rc::new(self.body()?))
+				Some(Box::new(self.body()?))
 			}
 		} else {
 			None
 		};
 
-		Ok(Stmt::If(condition, Rc::new(body), else_body))
+		Ok(Stmt::If(condition, Box::new(body), else_body))
 	}
 
 	fn func(&mut self) -> Result<Stmt, Error> {
@@ -287,22 +281,18 @@ impl<'s> Parser<'s> {
 
 		let body = self.body()?;
 
-		Ok(Stmt::Func(func_name, args, Rc::new(body)))
+		Ok(Stmt::Func(func_name, args, Box::new(body)))
 	}
 
 	fn statement(&mut self) -> Result<Stmt, Error> {
 		match self.tokens.peek() {
-			Token::Number(_) | Token::LParen => {
-				self.expression()
-			}
-
 			Token::Identifier(name) => {
 				self.tokens.next();
 
 				if self.consumed(Token::Assign) {
 					self.assign(name)
 				} else {
-					self.expression()
+					Err(self.err(&format!("erroneous variable {name}")))
 				}
 			}
 
