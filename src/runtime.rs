@@ -38,15 +38,31 @@ impl fmt::Display for Object {
 }
 
 pub struct Runtime {
-	global_variable_index: HashMap<String, Object>,
+	variable_scope: Vec<HashMap<String, Object>>,
+	scope_depth: usize,
 	ret: Option<Object>,
 }
 
 impl Runtime {
 	pub fn new() -> Runtime {
 		Runtime{
-			global_variable_index: HashMap::new(),
+			variable_scope: vec![HashMap::new()],
+			scope_depth: 0, // Global scope is 0, obviously
 			ret: None,
+		}
+	}
+
+	fn set_variable(&mut self, var_name: String, val: Object) {
+		let scope = &mut self.variable_scope[self.scope_depth];
+		scope.insert(var_name, val);
+	}
+
+	fn get_variable(&self, var_name: &String) -> Option<Object> {
+		let scope = &self.variable_scope[self.scope_depth];
+
+		match scope.get(var_name) {
+			Some(o) => Some(o.clone()),
+			None => None,
 		}
 	}
 
@@ -101,7 +117,7 @@ impl Runtime {
 			Expr::Bool(b) => Ok(Object::Bool(b)),
 
 			Expr::Var(var_name) => {
-				match self.global_variable_index.get(&var_name) {
+				match self.get_variable(&var_name) {
 					Some(o) => Ok(o.clone()),
 					None => Err(Error::new(&format!("variable '{var_name}' not found"))),
 				}
@@ -120,7 +136,7 @@ impl Runtime {
 
 			Stmt::Assign(var_name, expr) => {
 				let val = self.expression(expr)?;
-				self.global_variable_index.insert(var_name.to_string(), val);
+				self.set_variable(var_name.to_string(), val)
 			}
 
 			Stmt::Print(expr) => {
@@ -186,7 +202,7 @@ impl Runtime {
 
 				Stmt::Assign(var_name, expr) => {
 					let val = self.expression(expr)?;
-					self.global_variable_index.insert(var_name.to_string(), val);
+					self.set_variable(var_name, val);
 				}
 
 				Stmt::Print(expr) => {
