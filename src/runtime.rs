@@ -58,12 +58,15 @@ impl Runtime {
 	}
 
 	fn get_variable(&self, var_name: &String) -> Option<Object> {
-		let scope = &self.variable_scope[self.scope_depth];
+		for i in self.scope_depth..=0 {
+			let scope = &self.variable_scope[i];
 
-		match scope.get(var_name) {
-			Some(o) => Some(o.clone()),
-			None => None,
+			if let Some(o) = scope.get(var_name) {
+				return Some(o.clone());
+			}
 		}
+
+		None
 	}
 
 	#[allow(unused_variables)]
