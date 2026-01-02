@@ -73,7 +73,7 @@ impl<'s> Parser<'s> {
 			Token::LParen => {
 				let e = self.expr()?;
 
-				self.expect(Token::RParen, String::from("expected closing parentheses"))?;
+				self.expect(Token::RParen, "expected closing parentheses".to_string())?;
 
 				Ok(Expr::Group(Rc::new(e)))
 			}
@@ -160,6 +160,8 @@ impl<'s> Parser<'s> {
 	fn expression(&mut self) -> Result<Stmt<'s>, Error> {
 		let expr = self.expr()?;
 
+		self.expect(Token::Semicolon, "missing semicolon".to_string())?;
+
 		Ok(Stmt::Expression(expr))
 	}
 
@@ -167,24 +169,34 @@ impl<'s> Parser<'s> {
 		todo!();
 	}
 
-	pub fn parse(&mut self) -> Result<Stmt<'s>, Error> {
-		match self.tokens.peek() {
-			Token::Number(_) | Token::LParen => {
-				self.expression()
-			}
+	pub fn parse(&mut self) -> Result<Vec<Stmt<'s>>, Error> {
+		let mut stmts: Vec<Stmt<'s>> = Vec::new();
 
-			Token::Identifier(_) => {
-				let mut tokens = self.tokens.clone();
-				tokens.next();
-
-				if tokens.peek() == Token::Assign {
-					self.assign()
-				} else {
-					self.expression()
+		while self.tokens.peek() != Token::EOF {
+			let stmt = match self.tokens.peek() {
+				Token::Number(_) | Token::LParen => {
+					self.expression()?
 				}
-			}
 
-			tok => Err(self.err(format!("unexpected token {tok:?}"))),
+				Token::Identifier(_) => {
+					let mut tokens = self.tokens.clone();
+					tokens.next();
+
+					if tokens.peek() == Token::Assign {
+						self.assign()?
+					} else {
+						self.expression()?
+					}
+				}
+
+				tok => {
+					return Err(self.err(format!("unexpected token {tok:?}")))
+				}
+			};
+
+			stmts.push(stmt);
 		}
+
+		Ok(stmts)
 	}
 }

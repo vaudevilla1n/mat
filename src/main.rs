@@ -10,7 +10,7 @@ fn run(src: &str) {
 	let mut parser = parser::Parser::new(lexer); 
 
 	match parser.parse() {
-		Ok(expr) => println!("{expr:?}"),
+		Ok(stmts) => stmts.into_iter().for_each(|stmt| println!("{stmt:?}")),
 		Err(err) => eprintln!("{err}"),
 	}
 }
