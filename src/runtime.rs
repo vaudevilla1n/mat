@@ -58,15 +58,24 @@ impl Runtime {
 	}
 
 	fn get_variable(&self, var_name: &String) -> Option<Object> {
-		for i in self.scope_depth..=0 {
-			let scope = &self.variable_scope[i];
+		// try to find variable in the current function's scope then in the global scope
 
-			if let Some(o) = scope.get(var_name) {
-				return Some(o.clone());
-			}
+		let scope = &self.variable_scope[self.scope_depth];
+
+		if let Some(o) = scope.get(var_name) {
+			return Some(o.clone());
 		}
 
-		None
+		if self.scope_depth != 0 {
+			let global_scope = &self.variable_scope[0];
+
+			match global_scope.get(var_name) {
+				Some(o) => Some(o.clone()),
+				None => None,
+			}
+		} else {
+			None
+		}
 	}
 
 	#[allow(unused_variables)]
