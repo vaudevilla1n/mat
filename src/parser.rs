@@ -2,6 +2,7 @@ use std::{ boxed::Box, fmt, error };
 use crate::lexer::*;
 
 
+#[derive(Clone)]
 #[derive(Debug)]
 pub enum Expr {
 	Binary(Box<Expr>, Token, Box<Expr>),
@@ -13,11 +14,11 @@ pub enum Expr {
 	Var(String),
 }
 
+#[derive(Clone)]
 #[derive(Debug)]
 pub enum Stmt {
-	Body(Vec<Stmt>),
-	If(Expr, Box<Stmt>, Option<Box<Stmt>>),
-	Func(String, Vec<String>, Box<Stmt>),
+	If(Expr, Vec<Stmt>, Option<Vec<Stmt>>),
+	Func(String, Vec<String>, Vec<Stmt>),
 	Assign(String, Expr),
 	Print(Expr),
 	Return(Expr),
@@ -218,7 +219,7 @@ impl<'s> Parser<'s> {
 		Ok(Stmt::Print(expr))
 	}
 
-	fn body(&mut self) -> Result<Stmt, Error> {
+	fn body(&mut self) -> Result<Vec<Stmt>, Error> {
 		self.expect(Token::LBracket, "missing opening brace for if statement")?;
 
 		let mut body: Vec<Stmt> = Vec::new();
@@ -233,23 +234,24 @@ impl<'s> Parser<'s> {
 
 		self.expect(Token::RBracket, "missing closing brace")?;
 
-		Ok(Stmt::Body(body))
+		Ok(body)
 	}
 
 	fn if_stmt(&mut self) -> Result<Stmt, Error> {
 		let condition = self.expression()?;
 		let body = self.body()?;
+
 		let else_body = if self.consumed(Token::Else) {
 			if self.consumed(Token::If) {
-				Some(Box::new(self.if_stmt()?))
+				Some(vec![self.if_stmt()?])
 			} else {
-				Some(Box::new(self.body()?))
+				Some(self.body()?)
 			}
 		} else {
 			None
 		};
 
-		Ok(Stmt::If(condition, Box::new(body), else_body))
+		Ok(Stmt::If(condition, body, else_body))
 	}
 
 	fn func(&mut self) -> Result<Stmt, Error> {
@@ -281,7 +283,7 @@ impl<'s> Parser<'s> {
 
 		let body = self.body()?;
 
-		Ok(Stmt::Func(func_name, args, Box::new(body)))
+		Ok(Stmt::Func(func_name, args, body))
 	}
 
 	fn statement(&mut self) -> Result<Stmt, Error> {
