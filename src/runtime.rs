@@ -55,6 +55,7 @@ struct Func {
 pub struct Runtime {
 	func_table: FuncTable,
 	global_scope: VariableScope,
+	local_scope: Vec<VariableScope>,
 }
 
 impl Runtime {
@@ -62,34 +63,37 @@ impl Runtime {
 		Runtime{
 			func_table: HashMap::new(),
 			global_scope: HashMap::new(),
+			local_scope: Vec::new(),
 		}
 	}
 
-	fn call(&mut self, local_scope: &mut Option<&mut VariableScope>, func_name: String, input: Vec<Expr>) -> Result<Object, Error> {
+	fn call(&mut self, func_name: String, input: Vec<Expr>) -> Result<Object, Error> {
 		let func = match self.func_table.get(&func_name) {
 			Some(func) => func.clone(),
 			None => { return Err(Error::new(format!("function '{func_name}' doesn't exist"))); }
 		};
 
 		let mut func_scope: VariableScope = HashMap::new();
-
 		for (arg, input) in iter::zip(func.args, input) {
-			let val = self.expression(local_scope, input)?;
+			let val = self.expression(input)?;
 			func_scope.insert(arg, val);
 		}
 
-		let ret = self.body(&mut Some(&mut func_scope), func.body)?;
+		self.local_scope.push(func_scope);
+		let ret = self.body(func.body)?;
+		self.local_scope.pop();
+
 		match ret {
 			Some(obj) => Ok(obj),
 			None => Err(Error::from("function '{func_name}' doesn't return a value")),
 		}
 	}
 
-	fn expression(&mut self, local_scope: &mut Option<&mut VariableScope>, e: Expr) -> Result<Object, Error> {
+	fn expression(&mut self, e: Expr) -> Result<Object, Error> {
 		match e {
 			Expr::Binary(left, op, right) => {
-				let x = self.expression(local_scope, *left)?;
-				let y = self.expression(local_scope, *right)?;
+				let x = self.expression(*left)?;
+				let y = self.expression(*right)?;
 
 				match (x, op, y) {
 					(Object::Number(x), Token::Plus, Object::Number(y)) => Ok(Object::Number(x + y)),
@@ -116,7 +120,7 @@ impl Runtime {
 			}
 
 			Expr::Unary(op, right) => {
-				let x = self.expression(local_scope, *right)?;
+				let x = self.expression(*right)?;
 
 				match (op, x) {
 					(Token::Minus, Object::Number(x)) => Ok(Object::Number(-x)),
@@ -126,16 +130,16 @@ impl Runtime {
 				}
 			}
 
-			Expr::Group(expr) => self.expression(local_scope, *expr),
+			Expr::Group(expr) => self.expression(*expr),
 
-			Expr::Call(func_name, args) => self.call(local_scope, func_name, args),
+			Expr::Call(func_name, args) => self.call(func_name, args),
 
 			Expr::Number(x) => Ok(Object::Number(x)),
 
 			Expr::Bool(b) => Ok(Object::Bool(b)),
 
 			Expr::Var(var_name) => {
-				match local_scope {
+				match self.local_scope.last() {
 					Some(local_scope) => match local_scope.get(&var_name) {
 						Some(obj) => Ok(obj.clone()),
 						None => Err(Error::new(format!("variable '{var_name}' not found"))),
@@ -150,15 +154,15 @@ impl Runtime {
 		}
 	}
 
-	fn body(&mut self, local_scope: &mut Option<&mut VariableScope>, body: Vec<Stmt>) -> Result<Option<Object>, Error> {
+	fn body(&mut self, body: Vec<Stmt>) -> Result<Option<Object>, Error> {
 		for stmt in body {
 			match stmt {
 				Stmt::If(cond, body, else_body) => {
-					let cond = self.expression(local_scope, cond)?;
+					let cond = self.expression(cond)?;
 					let ret = match (cond, else_body) {
-						(Object::Bool(true), _) => self.body(local_scope, body),
+						(Object::Bool(true), _) => self.body(body),
 
-						(Object::Bool(false), Some(else_body)) => self.body(local_scope, else_body),
+						(Object::Bool(false), Some(else_body)) => self.body(else_body),
 
 						(Object::Bool(false), None) => Ok(None),
 
@@ -171,7 +175,7 @@ impl Runtime {
 				}
 
 				Stmt::Func(func_name, args, body) => {
-					match local_scope {
+					match self.local_scope.last() {
 						Some(_) => { return Err(Error::from("function definitions musn't be nested")); }
 
 						None => {
@@ -182,23 +186,23 @@ impl Runtime {
 				}
 
 				Stmt::Assign(var_name, expr) => {
-					let val = self.expression(local_scope, expr)?;
+					let val = self.expression(expr)?;
 
-					match local_scope {
+					match self.local_scope.last_mut() {
 						Some(local_scope) => { local_scope.insert(var_name, val); }
 						None => { self.global_scope.insert(var_name, val); } 
 					}
 				}
 
 				Stmt::Print(expr) => {
-					let obj = self.expression(local_scope, expr)?; 
+					let obj = self.expression(expr)?; 
 					println!("{obj}");
 				}
 
 				Stmt::Return(expr) => {
-					match local_scope {
+					match self.local_scope.last() {
 						Some(_) => {
-							let obj = self.expression(local_scope, expr)?; 
+							let obj = self.expression(expr)?; 
 							return Ok(Some(obj));
 						}
 
@@ -212,7 +216,7 @@ impl Runtime {
 	}
 
 	pub fn eval(&mut self, stmts: Vec<Stmt>) -> Result<(), Error> {
-		self.body(&mut None, stmts)?;
+		self.body(stmts)?;
 
 		Ok(())
 	}
