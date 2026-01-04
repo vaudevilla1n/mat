@@ -73,6 +73,10 @@ impl Runtime {
 			None => { return Err(Error::new(format!("function '{func_name}' doesn't exist"))); }
 		};
 
+		if input.len() != func.args.len() {
+			return Err(Error::new(format!("function '{func_name}' expects {} arg(s) but got {} arg(s)", func.args.len(), input.len()))); 
+		}
+
 		let mut func_scope: VariableScope = HashMap::new();
 		for (arg, input) in iter::zip(func.args, input) {
 			let val = self.expression(input)?;
@@ -85,7 +89,7 @@ impl Runtime {
 
 		match ret {
 			Some(obj) => Ok(obj),
-			None => Err(Error::from("function '{func_name}' doesn't return a value")),
+			None => Err(Error::new(format!("function '{func_name}' doesn't return a value"))),
 		}
 	}
 
@@ -139,16 +143,15 @@ impl Runtime {
 			Expr::Bool(b) => Ok(Object::Bool(b)),
 
 			Expr::Var(var_name) => {
-				match self.local_scope.last() {
-					Some(local_scope) => match local_scope.get(&var_name) {
-						Some(obj) => Ok(obj.clone()),
-						None => Err(Error::new(format!("variable '{var_name}' not found"))),
+				if let Some(local_scope) = self.local_scope.last() {
+					if let Some(obj) = local_scope.get(&var_name) {
+						return Ok(obj.clone());
 					}
+				}
 
-					None => match self.global_scope.get(&var_name) {
-						Some(obj) => Ok(obj.clone()),
-						None => Err(Error::new(format!("variable '{var_name}' not found"))),
-					}
+				match self.global_scope.get(&var_name) {
+					Some(obj) => Ok(obj.clone()),
+					None => Err(Error::new(format!("variable '{var_name}' not found"))),
 				}
 			}
 		}
