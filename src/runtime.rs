@@ -183,7 +183,10 @@ impl Runtime {
 
 						None => {
 							let func = Func{args: args, body: body};
-							self.func_table.insert(func_name, func);
+							match self.func_table.get(&func_name) {
+								Some(_) => { return Err(Error::new(format!("redefinition of function '{func_name}'"))); } 
+								None => { self.func_table.insert(func_name, func); }
+							}
 						}
 					}
 				}
