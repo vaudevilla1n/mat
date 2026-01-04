@@ -294,7 +294,7 @@ impl<'s> Parser<'s> {
 				if self.consumed(Token::Assign) {
 					self.assign(name)
 				} else {
-					Err(self.err(&format!("erroneous variable {name}")))
+					Err(self.err(&format!("erroneous identifier '{name}'")))
 				}
 			}
 
